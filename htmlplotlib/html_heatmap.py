@@ -1,21 +1,58 @@
 import numpy as np
 import colorsys
 from typing import Union, List, Optional, Set
+from .color_ranges import COLOR_RANGES
 
 def get_cmap(cmap_name: str, n: int = 256) -> List[str]:
     """
-    Returns a list of colors based on the provided colormap name.
-    Replace this placeholder with the actual colormap logic.
+    Returns a list of colors based on the provided colormap name using linear interpolation.
 
     Parameters:
-    - cmap_name (str): Name of the colormap. Must be a key in a colormap dictionary.
+    - cmap_name (str): Name of the colormap.
     - n (int): Number of colors in the colormap gradient.
 
     Returns:
     - List[str]: List of color hex values representing the colormap.
     """
-    # Example colormap generator: Grayscale gradient
-    return [f'#{i:02x}{i:02x}{i:02x}' for i in range(0, 256, 256 // n)]
+    if cmap_name not in COLOR_RANGES:
+        raise ValueError(f"Colormap '{cmap_name}' not found in COLOR_RANGES")
+
+    colors = COLOR_RANGES[cmap_name]
+
+    if len(colors) == n:
+        return colors
+    elif len(colors) < n:
+        # Interpolate if the number of requested colors exceeds the available colors
+        indices = np.linspace(0, len(colors) - 1, n)
+        interpolated_colors = []
+        for i in indices:
+            low_idx = int(np.floor(i))
+            high_idx = int(np.ceil(i))
+            low_color = colors[low_idx]
+            high_color = colors[high_idx]
+            if low_idx == high_idx:
+                interpolated_colors.append(low_color)
+            else:
+                # Simple linear interpolation in hex
+                interpolated_color = linear_interpolate_hex(low_color, high_color, i - low_idx)
+                interpolated_colors.append(interpolated_color)
+        return interpolated_colors
+    else:
+        # Downsample if the number of requested colors is less than available
+        indices = np.linspace(0, len(colors) - 1, n, dtype=int)
+        return [colors[i] for i in indices]
+
+def linear_interpolate_hex(color1, color2, t):
+    """Linearly interpolate between two hex colors."""
+    c1_r, c1_g, c1_b = int(color1[1:3], 16), int(color1[3:5], 16), int(color1[5:7], 16)
+    c2_r, c2_g, c2_b = int(color2[1:3], 16), int(color2[3:5], 16), int(color2[5:7], 16)
+
+    r = int(c1_r + (c2_r - c1_r) * t)
+    g = int(c1_g + (c2_g - c1_g) * t)
+    b = int(c1_b + (c2_b - c1_b) * t)
+
+    return f'#{r:02x}{g:02x}{b:02x}'
+
 
 def text_color_for_background(bg_color: str) -> str:
     """
@@ -68,28 +105,28 @@ def generate_color_bar(cmap_name: str, width: str = '100%', height: str = '20px'
     # Combine any custom label styles into a single CSS string
     label_css = '; '.join(f'{k}: {v}' for k, v in (label_style or {}).items())
 
-    # Determine the styles based on the orientation (horizontal or vertical)
-    orientation_style = {
-        'bar_dimension': f'width: {width}; height: {height};' if horizontal else f'width: {height}; height: {width};',
-        'bar_gradient': 'to right' if horizontal else 'to bottom',
-        'label_pos': 'left' if horizontal else 'top',
-        'label_transform': 'translateX(-50%)' if horizontal else 'translateY(-50%)',
-        'label_align': '50%' if horizontal else '50%',
-        'label_cross_align': 'top: 50%; transform: translateY(-50%);' if horizontal else 'left: 50%; transform: translateX(-50%);'
-    }
+    # Generate the HTML for the labels, adjusting for left, center, and right alignment
+    label_html = ''
+    for i, (text, pos) in enumerate(zip(label_texts, np.linspace(0, 1, num_labels))):
+        if i == 0:  # Leftmost label
+            alignment = 'left: 0%; text-align: left;'
+            transform = 'transform: translateY(-50%);' if horizontal else 'transform: translateX(-50%);'
+        elif i == num_labels - 1:  # Rightmost label
+            alignment = 'right: 0%; text-align: right;'
+            transform = 'transform: translateY(-50%);' if horizontal else 'transform: translateX(-50%);'
+        else:  # Middle labels
+            alignment = f'left: {pos * 100:.2f}%; text-align: center;'
+            transform = 'transform: translateX(-50%) translateY(-50%);' if horizontal else 'transform: translateY(-50%) translateX(-50%);'
 
-    # Generate the HTML for the labels, positioning them evenly along the color bar and centered on the bar
-    label_html = ''.join(
-        f'<span style="position: absolute; {orientation_style["label_pos"]}: {pos * 100:.2f}%; '
-        f'{orientation_style["label_cross_align"]} font-size: 10px; color: {text_color_for_background(colors_list[int(pos * (len(colors_list) - 1))])}; {label_css}">'
-        f'{text}</span>'
-        for text, pos in zip(label_texts, np.linspace(0, 1, num_labels))
-    )
+        label_html += (
+            f'<span style="position: absolute; {alignment} top: 50%; {transform} font-size: 10px; '
+            f'color: {text_color_for_background(colors_list[int(pos * (len(colors_list) - 1))])}; {label_css}">{text}</span>'
+        )
 
     # Assemble the full HTML for the color bar
     html = (
-        f'<div style="position: relative; {orientation_style["bar_dimension"]} margin-top: 20px; margin-left: 40px;">'
-        f'<div style="width: 100%; height: 100%; background: linear-gradient({orientation_style["bar_gradient"]}, {", ".join(colors_list)});"></div>'
+        f'<div style="position: relative; {width}; height: {height}; margin-top: 20px; margin-left: 40px;">'
+        f'<div style="width: 100%; height: 100%; background: linear-gradient(to right, {", ".join(colors_list)});"></div>'
         f'{label_html}'
         f'</div>'
     )
