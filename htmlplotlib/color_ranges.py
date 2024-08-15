@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # color_ranges.py
 
 COLOR_RANGES = {
@@ -40,4 +41,6 @@ COLOR_RANGES = {
                '#eff821'],
 }
 
+if __name__=="__main__":
+    print(*COLOR_RANGES, sep='\n')
 
