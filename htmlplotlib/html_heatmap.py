@@ -1,139 +1,79 @@
 import numpy as np
-import colorsys
+from IPython.display import HTML, display as ipy_display
 from typing import Union, List, Optional, Set
 from .color_ranges import COLOR_RANGES
+from .gradient import linear_gradient
 
 def get_cmap(cmap_name: str, n: int = 256) -> List[str]:
     """
-    Returns a list of colors based on the provided colormap name using linear interpolation.
+    Returns a color map based on the provided name.
 
     Parameters:
-    - cmap_name (str): Name of the colormap.
+    - cmap_name (str): Name of the colormap. Must be a key in COLOR_RANGES.
     - n (int): Number of colors in the colormap gradient.
 
     Returns:
     - List[str]: List of color hex values representing the colormap.
     """
-    if cmap_name not in COLOR_RANGES:
-        raise ValueError(f"Colormap '{cmap_name}' not found in COLOR_RANGES")
-
-    colors = COLOR_RANGES[cmap_name]
-
-    if len(colors) == n:
-        return colors
-    elif len(colors) < n:
-        # Interpolate if the number of requested colors exceeds the available colors
-        indices = np.linspace(0, len(colors) - 1, n)
-        interpolated_colors = []
-        for i in indices:
-            low_idx = int(np.floor(i))
-            high_idx = int(np.ceil(i))
-            low_color = colors[low_idx]
-            high_color = colors[high_idx]
-            if low_idx == high_idx:
-                interpolated_colors.append(low_color)
-            else:
-                # Simple linear interpolation in hex
-                interpolated_color = linear_interpolate_hex(low_color, high_color, i - low_idx)
-                interpolated_colors.append(interpolated_color)
-        return interpolated_colors
-    else:
-        # Downsample if the number of requested colors is less than available
-        indices = np.linspace(0, len(colors) - 1, n, dtype=int)
-        return [colors[i] for i in indices]
-
-def linear_interpolate_hex(color1, color2, t):
-    """Linearly interpolate between two hex colors."""
-    c1_r, c1_g, c1_b = int(color1[1:3], 16), int(color1[3:5], 16), int(color1[5:7], 16)
-    c2_r, c2_g, c2_b = int(color2[1:3], 16), int(color2[3:5], 16), int(color2[5:7], 16)
-
-    r = int(c1_r + (c2_r - c1_r) * t)
-    g = int(c1_g + (c2_g - c1_g) * t)
-    b = int(c1_b + (c2_b - c1_b) * t)
-
-    return f'#{r:02x}{g:02x}{b:02x}'
-
+    if cmap_name in COLOR_RANGES:
+        return linear_gradient(COLOR_RANGES[cmap_name], n)
+    raise ValueError(f"Color map '{cmap_name}' is not available in custom maps.")
 
 def text_color_for_background(bg_color: str) -> str:
     """
-    Determines the appropriate text color (black or white) based on the brightness of the background color
-    using the HSV (Hue, Saturation, Value) color model.
+    Determine the appropriate text color (black or white) based on the brightness of the background color.
 
     Parameters:
-    - bg_color (str): Hexadecimal color string for the background (e.g., '#RRGGBB').
+    - bg_color (str): Hexadecimal color string for the background.
 
     Returns:
     - str: Hexadecimal color string for the text, either '#FFFFFF' (white) or '#000000' (black).
     """
-    if not isinstance(bg_color, str) or len(bg_color) != 7 or not bg_color.startswith('#'):
-        raise ValueError(f"Invalid color format: '{bg_color}'. Expected format: '#RRGGBB'.")
+    rgb = np.array([int(bg_color[i:i + 2], 16) for i in (1, 3, 5)])
+    brightness = np.mean(rgb) / 255  # Simplified brightness check
+    return '#FFFFFF' if brightness < 0.5 else '#000000'
 
-    try:
-        rgb = np.array([int(bg_color[i:i + 2], 16) for i in (1, 3, 5)])
-        r, g, b = rgb / 255.0
-        brightness = colorsys.rgb_to_hsv(r, g, b)[-1]
-        return '#FFFFFF' if brightness < 0.5 else '#000000'
-    except ValueError as e:
-        raise ValueError(f"Error parsing color '{bg_color}': {e}")
-
-def generate_color_bar(cmap_name: str, width: str = '100%', height: str = '20px',
-                       num_labels: int = 6, labels: Optional[List[str]] = None,
-                       label_style: Optional[dict] = None, debug: Optional[Union[List[str], Set[str]]] = None,
-                       horizontal: bool = True) -> str:
+def generate_horizontal_color_bar(cmap_name: str, width: str = '100%',
+                                  height: str = '20px', num_labels: int = 6,
+                                  labels: Optional[List[str]] = None,
+                                  label_style: Optional[dict] = None,
+                                  debug: Optional[Union[List[str], Set[str]]] = None) -> str:
     """
-    Generates an HTML-based color bar, either horizontal or vertical, using the provided colormap.
+    Generates an HTML-based horizontal color bar using the provided colormap.
 
     Parameters:
     - cmap_name (str): Name of the colormap.
-    - width (str): CSS width for the color bar (for vertical bar, this is the thickness).
-    - height (str): CSS height for the color bar (for horizontal bar, this is the thickness).
+    - width (str): CSS width for the color bar.
+    - height (str): CSS height for the color bar.
     - num_labels (int): Number of labels to display alongside the color bar.
-    - labels (Optional[List[str]]): Custom labels for the color bar. Defaults to numeric labels from 0 to 1.
+    - labels (Optional[List[str]]): Custom labels for the color bar.
     - label_style (Optional[dict]): CSS styles for the labels.
-    - debug (Optional[Union[List[str], Set[str]]] Optional[List[str], Set[str]]): Debugging options to include comments in the HTML.
-    - horizontal (bool): If True, the bar is horizontal; if False, the bar is vertical.
+    - debug (Optional[Union[List[str], Set[str]]]): Debugging options to include comments in the HTML.
 
     Returns:
     - str: HTML string for the color bar.
     """
-
-    # Retrieve the list of colors from the colormap
-    colors_list = get_cmap(cmap_name)
-
-    # Generate default labels if none are provided
+    colors = ', '.join(get_cmap(cmap_name))
     label_texts = labels or [f'{tick:.1f}' for tick in np.linspace(0, 1, num_labels)]
-    # Combine any custom label styles into a single CSS string
     label_css = '; '.join(f'{k}: {v}' for k, v in (label_style or {}).items())
 
-    # Generate the HTML for the labels, adjusting for left, center, and right alignment
-    label_html = ''
-    for i, (text, pos) in enumerate(zip(label_texts, np.linspace(0, 1, num_labels))):
-        if i == 0:  # Leftmost label
-            alignment = 'left: 0%; text-align: left;'
-            transform = 'transform: translateY(-50%);' if horizontal else 'transform: translateX(-50%);'
-        elif i == num_labels - 1:  # Rightmost label
-            alignment = 'right: 0%; text-align: right;'
-            transform = 'transform: translateY(-50%);' if horizontal else 'transform: translateX(-50%);'
-        else:  # Middle labels
-            alignment = f'left: {pos * 100:.2f}%; text-align: center;'
-            transform = 'transform: translateX(-50%) translateY(-50%);' if horizontal else 'transform: translateY(-50%) translateX(-50%);'
+    label_html = (
+        f'<span style="position: absolute; left: {pos * 100:.2f}%; top: 50%; transform: translate(-50%, -50%); '
+        f'font-size: 10px; color: {text_color_for_background(get_cmap(cmap_name)[int(pos * (len(get_cmap(cmap_name)) - 1))])}; {label_css}">{text}</span>'
+        for text, pos in zip(label_texts, np.linspace(0, 1, num_labels))
+    )
 
-        label_html += (
-            f'<span style="position: absolute; {alignment} top: 50%; {transform} font-size: 10px; '
-            f'color: {text_color_for_background(colors_list[int(pos * (len(colors_list) - 1))])}; {label_css}">{text}</span>'
-        )
-
-    # Assemble the full HTML for the color bar
     html = (
-        f'<div style="position: relative; {width}; height: {height}; margin-top: 20px; margin-left: 40px;">'
-        f'<div style="width: 100%; height: 100%; background: linear-gradient(to right, {", ".join(colors_list)});"></div>'
-        f'{label_html}'
+        f'<div style="position: relative; width: {width}; height: {height}; margin-top: 20px; margin-left: 40px;">'
+        f'<div style="width: 100%; height: 100%; background: linear-gradient(to right, {colors});"></div>'
+        f'{"".join(label_html)}'
         f'</div>'
     )
 
-    # Add HTML comments if debugging is enabled
     if debug and 'html comments' in debug:
-        html = f'<!-- generate_color_bar -->\n{html}\n<!-- end generate_color_bar -->'
+        html = (
+            f'<!-- generate_horizontal_color_bar -->\n{html}\n<!-- end generate_horizontal_color_bar -->'
+        )
 
     return html
 
@@ -152,7 +92,30 @@ def html_heatmap(data: np.ndarray,
                  scale_factor: float = 1.0,
                  debug: Optional[Union[List[str], Set[str]]] = None) -> Optional[str]:
     """
-    Creates an HTML-based heatmap with X and Y axis labels.
+    Creates an HTML-based heatmap with a horizontal color bar using CSS for rendering in Jupyter notebooks.
+
+    Parameters:
+    - data (np.ndarray): A 2D NumPy array of shape (n, m) containing the data values to be plotted as a heatmap.
+    - xticklabels (Optional[Union[List[str], np.ndarray]]): List or array of labels for the x-axis (columns).
+    - yticklabels (Optional[Union[List[str], np.ndarray]]): List or array of labels for the y-axis (rows).
+    - annot (bool): If True, write the data value in each cell.
+    - fmt (str): String formatting code to format the annotation text.
+    - cmap (str): The colormap to use. Should be one of the keys in COLOR_RANGES.
+    - vmin (Optional[float]): The minimum value of the colormap. If None, the minimum value in the data is used.
+    - vmax (Optional[float]): The maximum value of the colormap. If None, the maximum value in the data is used.
+    - square (bool): If True, set the aspect ratio of the heatmap cells to be square.
+    - linewidths (float): Width of the lines that divide each cell. Default is 0 to hide borders.
+    - linecolor (str): Color of the lines that divide each cell.
+    - mask (Optional[np.ndarray]): A 2D boolean array where True entries will be hidden from the heatmap.
+    - xlabel (Optional[str]): Label for the x-axis, displayed at the top of the table.
+    - ylabel (Optional[str]): Label for the y-axis, displayed to the left of the table, rotated vertically.
+    - show (bool): If True, display the heatmap. If False, return the HTML string.
+    - font_size (int): Font size for the heatmap text.
+    - scale_factor (float): Factor to scale the size of the heatmap cells.
+    - debug (Optional[Union[List[str], Set[str]]] Optional[List[str], Set[str]]): Debugging options to include comments in the HTML.
+
+    Returns:
+    - Optional[str]: If show is False, returns the HTML string for the heatmap; otherwise, None.
     """
     vmin = vmin if vmin is not None else np.min(data)
     vmax = vmax if vmax is not None else np.max(data)
@@ -169,26 +132,23 @@ def html_heatmap(data: np.ndarray,
     # HTML for x-axis labels
     xtick_html = ''
     if xticklabels is not None:
-        xtick_html = '<tr>'
-        if yticklabels is not None:
-            # Add an empty cell at the top-left corner if yticklabels are present
-            xtick_html += '<td style="background-color: #f0f0f0;"></td>'
-        xtick_html += ''.join(
-            f'<th style="text-align: center; padding: 5px; background-color: #f0f0f0;">{label}</th>'
-            for label in xticklabels
+        xtick_html = (
+            '<tr><td style="background-color: #f0f0f0;"></td>'
+            + ''.join(
+                f'<th style="text-align: center; padding: 5px; background-color: #f0f0f0;">{label}</th>'
+                for label in xticklabels
+            )
+            + '</tr>'
         )
-        xtick_html += '</tr>'
 
     # HTML for y-axis labels and the data grid
     rows_html = ''
     for i, row in enumerate(norm_data):
-        row_html = ''
-        if yticklabels is not None:
-            # Add y-axis label for each row
-            row_html += (
-                f'<th style="padding: 5px; text-align: center; background-color: #f0f0f0;">{yticklabels[i]}</th>'
-            )
-        row_html += ''.join(
+        y_label = (
+            f'<th style="padding: 5px; text-align: center; background-color: #f0f0f0;">{yticklabels[i]}</th>'
+            if yticklabels is not None else ''
+        )
+        row_html = y_label + ''.join(
             (
                 f'<td style="background-color: {colors[int(val * (len(colors) - 1))]}; '
                 f'border: {linewidths}px solid {linecolor}; text-align: center; '
@@ -213,15 +173,9 @@ def html_heatmap(data: np.ndarray,
     grid_width = f"{scale_factor * 50 * num_cols}px"
     color_bar_width = grid_width
 
-    # Generate color bar HTML with labels centered on the bar
-    color_bar_html = generate_color_bar(
-        cmap_name=cmap,
-        width=color_bar_width,
-        height='20px',
-        num_labels=6,
-        label_style={'font-size': '10px'},
-        horizontal=True,
-        debug=debug
+    # Color bar HTML
+    color_bar_html = generate_horizontal_color_bar(
+        cmap, width=color_bar_width, height='20px', debug=debug
     )
 
     # X-axis label (xlabel) HTML
@@ -240,11 +194,11 @@ def html_heatmap(data: np.ndarray,
     # Combine all components into a flexbox container
     full_html = (
         f'<div style="display: flex; align-items: center; justify-content: center;">'
-        f'{ylabel_html}'  # Y-axis label on the left
+        f'{ylabel_html}'  # Restored Y-axis label to the left of the heatmap
         f'<div>'
-        f'{xlabel_html}'  # X-axis label at the top
+        f'{xlabel_html}'  # xlabel is correctly at the top
         f'{table_html}'
-        f'{color_bar_html}'  # Horizontal color bar below the heatmap, with labels centered
+        f'{color_bar_html}'  # Horizontal color bar below the heatmap
         f'</div>'
         f'</div>'
     )
@@ -253,7 +207,6 @@ def html_heatmap(data: np.ndarray,
         full_html = f'<!-- full_html -->\n{full_html}\n<!-- end full_html -->'
 
     if show:
-        from IPython.display import HTML, display as ipy_display
         ipy_display(HTML(full_html))
     else:
         return full_html

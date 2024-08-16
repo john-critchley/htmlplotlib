@@ -1,0 +1,18 @@
+# Ignore deployment script
+deploy.sh
+
+# Ignore distribution files
+dist/
+
+# Ignore Python egg info directory
+htmlplotlib.egg-info/
+
+# Ignore Python bytecode files and cache directories
+htmlplotlib/__pycache__/
+
+# Ignore the script for replacing function definitions
+replace_def.py
+
+# Ignore the test HTML output file
+test.html
+
