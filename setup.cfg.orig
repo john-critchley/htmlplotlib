@@ -8,17 +8,17 @@ long_description = file: README.md
 long_description_content_type = text/markdown
 url = https://github.com/john-critchley/htmlplotlib
 license = BSD-3-Clause
-classifiers = 
-	Programming Language :: Python :: 3
-	License :: OSI Approved :: BSD License
-	Operating System :: OS Independent
+classifiers =
+    Programming Language :: Python :: 3
+    License :: OSI Approved :: BSD License
+    Operating System :: OS Independent
 
 [options]
 packages = find:
 python_requires = >=3.6
-install_requires = 
-	numpy
-	IPython
+install_requires =
+    numpy
+    IPython
 
 [options.package_data]
 * = *.md, *.txt
