@@ -4,6 +4,33 @@ from typing import Union, List, Optional, Set
 from .color_ranges import COLOR_RANGES
 from .gradient import linear_gradient
 
+def text_color_for_background(bg_color: str) -> str:
+    rgb = np.array([int(bg_color[i:i + 2], 16) for i in (1, 3, 5)])
+    brightness = colorsys.rgb_to_hsv(*(rgb / 255.0))[-1]
+    return '#FFFFFF' if brightness < 0.5 else '#000000'
+
+def calculate_nice_range(data_min: float, data_max: float) -> (float, float):
+    """
+    Calculates a 'nice' range for the data by extending the range to round numbers.
+
+    Parameters:
+    - data_min (float): The minimum value in the data.
+    - data_max (float): The maximum value in the data.
+
+    Returns:
+    - (float, float): A tuple of (nice_min, nice_max) representing the extended range.
+    """
+    range_span = data_max - data_min
+
+    # Calculate the order of magnitude of the range
+    magnitude = 10 ** np.floor(np.log10(range_span))
+
+    # Calculate the nice minimum and maximum
+    nice_min = np.floor(data_min / magnitude) * magnitude
+    nice_max = np.ceil(data_max / magnitude) * magnitude
+
+    return nice_min, nice_max
+
 def get_cmap(cmap_name: str, n: int = 256) -> List[str]:
     """
     Returns a color map based on the provided name.
@@ -33,7 +60,7 @@ def text_color_for_background(bg_color: str) -> str:
     brightness = np.mean(rgb) / 255  # Simplified brightness check
     return '#FFFFFF' if brightness < 0.5 else '#000000'
 
-def generate_grid_html(data, colors, annot, fmt, linewidths, linecolor, square, 
+def generate_grid_html(data, colors, annot, fmt, linewidths, linecolor, square,
                        xticklabels, yticklabels, scale_factor, font_size):
     # Start building the HTML for the grid
     rows_html = ''
@@ -59,10 +86,10 @@ def generate_grid_html(data, colors, annot, fmt, linewidths, linecolor, square,
         )
         row_html = y_label + ''.join(
             (
-                f'<td style="background-color: {colors[int(val * (len(colors) - 1))]}; '
+                f'<td style="background-color: {colors[int((val - np.min(data)) / (np.max(data) - np.min(data)) * (len(colors) - 1))]}; '
                 f'border: {linewidths}px solid {linecolor}; text-align: center; '
                 f'width: {scale_factor * 50}px; height: {scale_factor * 50}px; '
-                f'color: {text_color_for_background(colors[int(val * (len(colors) - 1))])};">'
+                f'color: {text_color_for_background(colors[int((val - np.min(data)) / (np.max(data) - np.min(data)) * (len(colors) - 1))])};">'
                 f'{f"{val:{fmt}}" if annot else ""}</td>'
             )
             for val in row
@@ -77,98 +104,105 @@ def generate_grid_html(data, colors, annot, fmt, linewidths, linecolor, square,
 
     return table_html
 
-def generate_color_bar_html(cmap_name: str, colors: List[str], width: str, height: str,
-                            num_labels: int = 6, debug: Optional[Union[List[str], Set[str]]] = None,
-                            orientation: str = 'horizontal') -> str:
+def generate_color_bar_html(cmap_name, colors, width='100%', height='20px',
+                            orientation='horizontal', debug=None, vmin=0, vmax=1,
+                            cbar_fmt='.1f', num_labels=5):
     """
-    Generates an HTML-based color bar using the provided colormap, either horizontally or vertically.
+    Generates the HTML for a color bar with a gradient, either horizontal or vertical.
 
     Parameters:
     - cmap_name (str): Name of the colormap.
-    - colors (List[str]): List of colors representing the colormap.
-    - width (str): CSS width for the color bar (for vertical orientation, this is the thickness).
-    - height (str): CSS height for the color bar (for horizontal orientation, this is the thickness).
-    - num_labels (int): Number of labels to display alongside the color bar.
-    - debug (Optional[Union[List[str], Set[str]]] Optional[List[str], Set[str]]): Debugging options to include comments in the HTML.
-    - orientation (str): Either 'horizontal' or 'vertical'. Determines the orientation of the color bar.
+    - colors (List[str]): List of colors in the colormap.
+    - width (str): Width of the color bar.
+    - height (str): Height of the color bar.
+    - orientation (str): Orientation of the color bar, either 'horizontal' or 'vertical'.
+    - debug (Optional[Union[List[str], Set[str]]] Optional[List[str], Set[str]]): Debug options.
+    - vmin (float): Minimum value for the color bar labels.
+    - vmax (float): Maximum value for the color bar labels.
+    - cbar_fmt (str): Format for the color bar labels.
+    - num_labels (int): Number of labels on the color bar.
 
     Returns:
     - str: HTML string for the color bar.
     """
-    label_texts = [f'{tick:.1f}' for tick in np.linspace(0, 1, num_labels)]
-    label_positions = np.linspace(0, 1, num_labels)
 
-    if orientation == 'horizontal':
-        bar_gradient = 'to right'
-        primary_pos = 'left'
-        secondary_pos = 'top'
-        translate_primary = '-50%'  # Center labels horizontally
-        translate_secondary = '-50%'  # Center labels vertically
+    # Determine gradient direction based on orientation
+    gradient_direction = "to right" if orientation == 'horizontal' else "to top"
 
-        def calculate_translation(pos):
-            return f'translateX(-{pos * 100:.2f}%)'
+    # Generate the label texts
+    label_positions = np.linspace(vmin, vmax, num_labels)
+    label_texts = [f'{tick:{cbar_fmt}}' for tick in label_positions]
 
-    else:
-        bar_gradient = 'to bottom'
-        primary_pos = 'top'
-        secondary_pos = 'left'
-        translate_primary = '-50%'  # Center labels horizontally
-        translate_secondary = '-50%'  # Center labels vertically
-
-        def calculate_translation(pos):
-            return f'translateY(-{pos * 100:.2f}%)'
-
-    # Generate label HTML
-    label_html = []
-    for text, pos in zip(label_texts, label_positions):
-        if orientation == 'horizontal':
-            label_html.append(
-                f'<span style="position: absolute; {primary_pos}: {pos * 100:.2f}%; '
-                f'transform: translate(-{pos * 100:.2f}%, {translate_secondary}); '
-                f'{secondary_pos}: 50%; font-size: 10px; color: {text_color_for_background(colors[int(pos * (len(colors) - 1))])};">'
-                f'{text}</span>'
-            )
-        else:
-            label_html.append(
-                f'<span style="position: absolute; {primary_pos}: {pos * 100:.2f}%; '
-                f'transform: translate({translate_primary}, -{pos * 100:.2f}%); '
-                f'{secondary_pos}: 50%; font-size: 10px; color: {text_color_for_background(colors[int(pos * (len(colors) - 1))])};">'
-                f'{text}</span>'
-            )
-
-    # Generate the final HTML for the color bar
-    html = (
+    # Create the HTML for the color bar
+    color_bar_html = (
         f'<div style="position: relative; width: {width}; height: {height}; margin-top: 20px; margin-left: 40px;">'
-        f'<div style="width: 100%; height: 100%; background: linear-gradient({bar_gradient}, {", ".join(colors)});"></div>'
-        f'{"".join(label_html)}'
-        f'</div>'
+        f'<div style="width: 100%; height: 100%; background: linear-gradient({gradient_direction}, {", ".join(colors)});"></div>'
     )
 
-    if debug and 'html comments' in debug:
-        html = f'<!-- generate_color_bar_html -->{html}<!-- end generate_color_bar_html -->'
+    # Add labels to the color bar
+    for i, (pos, text) in enumerate(zip(np.linspace(0, 100, num_labels), label_texts)):
+        # Calculate the color based on the background
+        bg_color = colors[int(pos / 100 * (len(colors) - 1))]
+        text_color = text_color_for_background(bg_color)
 
-    return html
+        if orientation == 'horizontal':
+            # Adjusting horizontal alignment based on position
+            label_style = f'left: {pos}%; top: 50%; transform: translate(-{pos}%, -50%);'
+        else:
+            # Adjusting vertical alignment based on position
+            label_style = f'top: {100 - pos}%; left: 50%; transform: translate(-50%, -{100 - pos}%);'
 
+        color_bar_html += (
+            f'<span style="position: absolute; {label_style}; font-size: 10px; color: {text_color};">{text}</span>'
+        )
 
-def html_heatmap(data: np.ndarray,
-                 xticklabels: Optional[Union[List[str], np.ndarray]] = None,
-                 yticklabels: Optional[Union[List[str], np.ndarray]] = None,
-                 annot: bool = True, fmt: str = '.2f', cmap: str = 'rocket',
-                 vmin: Optional[float] = None, vmax: Optional[float] = None,
-                 square: bool = False, linewidths: float = 0,  # Default to 0 to hide borders
-                 linecolor: str = 'black',
-                 mask: Optional[np.ndarray] = None,
-                 xlabel: Optional[str] = None,
-                 ylabel: Optional[str] = None,
-                 show: bool = True,
-                 font_size: int = 12,
-                 scale_factor: float = 1.0,
-                 cbar_kws: Optional[dict] = None,
-                 debug: Optional[Union[List[str], Set[str]]] = None) -> Optional[str]:
-    
-    # Normalize the data for color mapping
-    vmin = vmin if vmin is not None else np.min(data)
-    vmax = vmax if vmax is not None else np.max(data)
+    color_bar_html += '</div>'
+
+    return color_bar_html
+
+def html_heatmap(data, xticklabels=None, yticklabels=None, annot=True, fmt='.2f',
+                 cmap='viridis', vmin=None, vmax=None, square=False,
+                 linewidths=1, linecolor='white', mask=None,
+                 xlabel='', ylabel='', show=False, font_size=10, scale_factor=1.0,
+                 cbar_kws=None, cbar_fmt='.1f', debug=False):
+    """
+    Create an HTML heatmap visualization.
+
+    Parameters:
+    - data (np.ndarray): The data to visualize.
+    - xticklabels (List[str]): Labels for the x-axis.
+    - yticklabels (List[str]): Labels for the y-axis.
+    - annot (bool): Annotate each cell with the numeric value.
+    - fmt (str): Format for annotating numeric values.
+    - cmap (str): Colormap name.
+    - vmin (float): Minimum value for colormap normalization.
+    - vmax (float): Maximum value for colormap normalization.
+    - square (bool): Enforce square cells.
+    - linewidths (float): Width of the lines separating cells.
+    - linecolor (str): Color of the lines separating cells.
+    - mask (np.ndarray): Boolean array indicating where to mask cells.
+    - xlabel (str): Label for the x-axis.
+    - ylabel (str): Label for the y-axis.
+    - show (bool): Display the heatmap immediately.
+    - font_size (int): Font size for labels.
+    - scale_factor (float): Scaling factor for heatmap size.
+    - cbar_kws (dict): Keyword arguments for color bar.
+    - cbar_fmt (str): Format for color bar labels.
+    - debug (bool): Enable debug information.
+
+    Returns:
+    - str: HTML string representing the heatmap.
+    """
+
+    # If vmin or vmax are not provided, use the data's min/max
+    if vmin is None or vmax is None:
+        data_min, data_max = calculate_nice_range(np.min(data), np.max(data))
+        vmin = vmin if vmin is not None else data_min
+        vmax = vmax if vmax is not None else data_max
+    else:
+        vmin, vmax = calculate_nice_range(vmin, vmax)
+
+    # Normalize data for color mapping only
     norm_data = (data - vmin) / (vmax - vmin)
 
     # Get the colormap
@@ -177,29 +211,26 @@ def html_heatmap(data: np.ndarray,
     # Determine orientation from cbar_kws
     orientation = cbar_kws.get('orientation', 'horizontal') if cbar_kws else 'horizontal'
 
-    # Generate the grid HTML
-    grid_html = generate_grid_html(norm_data, colors, annot, fmt, linewidths, linecolor,
+    # Generate the grid HTML using original data values for display, normalized data for colors
+    grid_html = generate_grid_html(data, colors, annot, fmt, linewidths, linecolor,
                                    square, xticklabels, yticklabels, scale_factor, font_size)
-
-    # Y-axis label (ylabel) HTML
-    ylabel_html = (
-        f'<div style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; '
-        f'font-weight: bold; margin-right: 10px; height: {scale_factor * 50 * data.shape[0]}px;">{ylabel}</div>'
-        if ylabel else ''
-    )
-
-    # X-axis label (xlabel) HTML
-    xlabel_html = (
-        f'<div style="text-align: center; font-weight: bold; margin-top: 10px;">{xlabel}</div>'
-        if xlabel else ''
-    )
 
     # Generate the color bar HTML
     color_bar_size = f"{scale_factor * 50 * data.shape[1]}px" if orientation == 'horizontal' else f"{scale_factor * 50 * data.shape[0]}px"
     color_bar_html = generate_color_bar_html(cmap, colors,
                                              width=color_bar_size if orientation == 'horizontal' else '20px',
                                              height='20px' if orientation == 'horizontal' else color_bar_size,
-                                             orientation=orientation, debug=debug)
+                                             orientation=orientation, debug=debug, vmin=vmin, vmax=vmax, cbar_fmt=cbar_fmt)
+
+    # X-axis label HTML
+    xlabel_html = f'<div style="text-align: center; font-weight: bold; margin-bottom: 10px;">{xlabel}</div>' if xlabel else ''
+
+    # Y-axis label HTML
+    ylabel_html = (
+        f'<div style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; '
+        f'font-weight: bold; margin-right: 10px; height: {scale_factor * 50 * data.shape[0]}px;">{ylabel}</div>'
+        if ylabel else ''
+    )
 
     # Combine all components into a flexbox container
     if orientation == 'horizontal':
@@ -223,11 +254,8 @@ def html_heatmap(data: np.ndarray,
             f'</div>'
         )
 
-    # If debug is enabled, wrap the full HTML in comments
-    if debug and 'html comments' in debug:
-        full_html = f'<!-- full_html -->\n{full_html}\n<!-- end full_html -->'
-
     if show:
+        from IPython.display import display, HTML
         display(HTML(full_html))
     else:
         return full_html
