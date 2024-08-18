@@ -43,12 +43,12 @@ Usage Example:
 Repo:
     https://github.com/john-critchley/htmlplotlib
 
-Version: 0.2.0
+Version: 0.2.1
 """
 
 from .color_ranges import COLOR_RANGES
 from .gradient import linear_gradient
 from .html_heatmap import html_heatmap
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
