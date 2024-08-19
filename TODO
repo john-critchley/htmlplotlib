@@ -1,13 +1,10 @@
-- remove dependancy on iPython so that it can be run outside a jupyter sheet more easily
-- enable it to be optionally dependent on the gradients in matplotlib so it can use that
-- layout check and improve
 - make various things movable
-  - gradient bar
   - column heading to below - if you like
   - rotate labels or not
   - specify label fonts
-- check performance - is it a bit slow now?
 - more & better example usages
 - command line usage
+- as well as taking an array as input, want to be able to have a pandas DataFrame (or Series)
 
 Add other things which can be done in HTML rather than using a matplotlib or seaborn image!
+eg bar graphs, pie chart?
