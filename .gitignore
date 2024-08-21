@@ -16,3 +16,8 @@ replace_def.py
 # Ignore the test HTML output file
 test.html
 
+#Ignore checkpoints for Jupyter Notebooks
+.ipynb_checkpoints
+
+#Ignore scratchpad Jupyter Notebook
+Untitled.ipynb
