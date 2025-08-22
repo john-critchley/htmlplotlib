@@ -3,6 +3,7 @@ from typing import Union, List, Optional, Set
 from .color_ranges import COLOR_RANGES
 from .gradient import linear_gradient
 from collections import namedtuple
+from box import Box
 
 DataTuple = namedtuple('DataTuple', ['original', 'normalized'])
 
@@ -27,39 +28,53 @@ def generate_grid_html(data_with_norm, colors, annot, fmt, linewidths, linecolor
                        xticklabels, yticklabels, scale_factor, font_size):
     rows_html = ''
     xtick_html = ''
+    background_color="#f0f0f0"  # Fixed typo
+    foreground_color=text_color_for_background(background_color)
+    
     if xticklabels is not None:
         xtick_html = (
             '<tr>' +
-            ('<th style="background-color: #f0f0f0;"></th>' if yticklabels is not None else '') +
+            (f'<th style="color: {foreground_color}; background-color: {background_color};"></th>' if yticklabels is not None else '') +
             ''.join(
-                f'<th style="text-align: center; padding: 5px; background-color: #f0f0f0;">{label}</th>'
+                f'<th style="text-align: center; padding: 5px; color: {foreground_color}; background-color: {background_color};">{label}</th>'
                 for label in xticklabels
             ) +
             '</tr>'
         )
-
-    for i, row in enumerate(data_with_norm):
+            
+    param = {'data_with_norm': data_with_norm}
+    
+    if annot is not None and isinstance(annot, list):
+        param['annot'] = annot
+    if yticklabels is not None:
+        param['yticklabels'] = yticklabels
+        
+    for pm in (Box(zip(param, j)) for j in zip(*param.values())):
         y_label = (
-            f'<th style="padding: 5px; text-align: center; background-color: #f0f0f0;">{yticklabels[i]}</th>'
-            if yticklabels is not None else ''
+            f'<th style="padding: 5px; text-align: center; color: {foreground_color}; background-color: {background_color};">{pm.yticklabels}</th>'
+            if 'yticklabels' in pm and pm.yticklabels is not None else ''
         )
+        
+        param2 = {'row': pm.data_with_norm}
+        if 'annot' in pm and pm.annot is not None:
+            param2['annot'] = pm.annot
+            
         row_html = y_label + ''.join(
-            (
-                f'<td style="background-color: {colors[int(val.normalized * (len(colors) - 1))]}; '
-                f'border: {linewidths}px solid {linecolor}; text-align: center; '
-                f'width: {scale_factor * 50}px; height: {scale_factor * 50}px; '
-                f'color: {text_color_for_background(colors[int(val.normalized * (len(colors) - 1))])};">'
-                f'{f"{val.original:{fmt}}" if annot else ""}</td>'
+                f'<td style="background-color: {colors[int(pmr.row.normalized * (len(colors) - 1))]}; '
+                f'border: {linewidths}px solid {linecolor}; text-align: center; vertical-align: middle; '
+                f'width: {scale_factor * 50}px; height: {scale_factor * 50}px; ' 
+                f'color: {text_color_for_background(colors[int(pmr.row.normalized * (len(colors) - 1))])};">'
+                f'<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; margin: 0; padding: 2px;">'
+                f'{(f"<div style=\"margin: 0; padding: 0; line-height: 1;\">{pmr.row.original:{fmt}}</div><div style=\"margin: 0; padding: 0; line-height: 1; font-size: 0.8em;\">{pmr.annot}</div>" if "annot" in pmr else f"<div style=\"margin: 0; padding: 0;\">{pmr.row.original:{fmt}}</div>") if annot else ""}'
+                f'</div></td>'
+                for pmr in (Box(zip(param2, k)) for k in zip(*param2.values()))
             )
-            for val in row
-        )
         rows_html += f'<tr>{row_html}</tr>'
-
+        
     table_html = (
         f'<table style="border-collapse: collapse; font-size: {font_size}px; margin: 0;">'
         f'{xtick_html}{rows_html}</table>'
     )
-
     return table_html
 
 def generate_color_bar_html(cmap_name, colors, width='100%', height='20px',
