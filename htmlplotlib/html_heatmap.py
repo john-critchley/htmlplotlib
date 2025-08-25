@@ -1,9 +1,10 @@
 import numpy as np
 from typing import Union, List, Optional, Set
+import numbers
+from box import Box
 from .color_ranges import COLOR_RANGES
 from .gradient import linear_gradient
 from collections import namedtuple
-from box import Box
 
 DataTuple = namedtuple('DataTuple', ['original', 'normalized'])
 
@@ -65,14 +66,14 @@ def generate_grid_html(data_with_norm, colors, annot, fmt, linewidths, linecolor
                 f'width: {scale_factor * 50}px; height: {scale_factor * 50}px; ' 
                 f'color: {text_color_for_background(colors[int(pmr.row.normalized * (len(colors) - 1))])};">'
                 f'<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; margin: 0; padding: 2px;">'
-                f'{(f"<div style=\"margin: 0; padding: 0; line-height: 1;\">{pmr.row.original:{fmt}}</div><div style=\"margin: 0; padding: 0; line-height: 1; font-size: 0.8em;\">{pmr.annot}</div>" if "annot" in pmr else f"<div style=\"margin: 0; padding: 0;\">{pmr.row.original:{fmt}}</div>") if annot else ""}'
+                f'<p>{(pmr.annot if "annot" in pmr else format(pmr.row.original, fmt)) if annot else ""}</p>'
                 f'</div></td>'
                 for pmr in (Box(zip(param2, k)) for k in zip(*param2.values()))
             )
         rows_html += f'<tr>{row_html}</tr>'
         
     table_html = (
-        f'<table style="border-collapse: collapse; font-size: {font_size}px; margin: 0;">'
+        f'<table style="border-collapse: collapse; font-size: {font_size}{"px" if isinstance(font_size, numbers.Integral) else ""}; margin: 0;">'
         f'{xtick_html}{rows_html}</table>'
     )
     return table_html
